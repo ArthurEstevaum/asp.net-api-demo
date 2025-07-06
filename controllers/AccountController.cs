@@ -30,7 +30,7 @@ public class AccountsController : ControllerBase
         {
             Email = dto.Email,
             SecurityStamp = Guid.NewGuid().ToString(),
-            UserName = dto.Email // UserName é obrigatório
+            UserName = dto.UserName // UserName é obrigatório
         };
 
         var result = await _userManager.CreateAsync(user, dto.Password);
@@ -69,11 +69,11 @@ public class AccountsController : ControllerBase
         // var userRoles = await _userManager.GetRolesAsync(user);
         // foreach (var role in userRoles) { authClaims.Add(new Claim(ClaimTypes.Role, role)); }
 
-        var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:SecretKey"] ?? ""));
+        var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"] ?? ""));
 
         var token = new JwtSecurityToken(
-            issuer: _configuration["JWT:ValidIssuer"],
-            audience: _configuration["JWT:ValidAudience"],
+            issuer: _configuration["Jwt:Issuer"],
+            audience: _configuration["Jwt:Audience"],
             expires: DateTime.Now.AddHours(3),
             claims: authClaims,
             signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
@@ -84,5 +84,5 @@ public class AccountsController : ControllerBase
 }
 
 // Crie os DTOs para receber os dados
-public class RegisterDto { public required string Email { get; set; } public required string Password { get; set; } }
+public class RegisterDto { public required string Email { get; set; } public required string UserName { get; set; } public required string Password { get; set; } }
 public class LoginDto { public required string Email { get; set; } public required string Password { get; set; } }

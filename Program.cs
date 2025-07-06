@@ -1,8 +1,11 @@
 using System.Text;
+using Azure;
+using Azure.Communication.Email;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using MinhaApiJwt.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -46,7 +49,33 @@ builder.Services.AddAuthentication(options =>
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "API JWT Demo", Version = "v1" });
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Insira o token JWT no formato: Bearer {seu token}"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 builder.Services.AddControllers();
 
 var app = builder.Build();
@@ -64,29 +93,29 @@ app.UseAuthorization();
 app.MapControllers();
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+string connectionString = "endpoint=https://transactionalemailsender.brazil.communication.azure.com/;accesskey=1U74oOyKR1NOQsqu6pptpH7dDcJk4kOIE607MLChM0fsbgugrPc2JQQJ99BGACULyCpQ2eabAAAAAZCSW1Uq";
+var emailClient = new EmailClient(connectionString);
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
+
+var emailMessage = new EmailMessage(
+    senderAddress: "DoNotReply@beholder.cloud",
+    content: new EmailContent("Test Email")
+    {
+        PlainText = "Hello world via email.",
+        Html = @"
+		<html>
+			<body>
+				<h1>Hello world via email.</h1>
+                <br />
+                <p>Sending hello from .net</p>
+			</body>
+		</html>"
+    },
+    recipients: new EmailRecipients(new List<EmailAddress> { new EmailAddress("fulano@example.com") }));
+    
+
+EmailSendOperation emailSendOperation = emailClient.Send(
+    WaitUntil.Completed,
+    emailMessage);
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
