@@ -93,7 +93,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.UseHttpsRedirection();
 
-string connectionString = configuration["AzureEmailService"] ?? "";
+string connectionString = builder.Configuration["ConnectionStrings:AzureEmailService"] ?? "";
 var emailClient = new EmailClient(connectionString);
 
 
