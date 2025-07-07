@@ -93,7 +93,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.UseHttpsRedirection();
 
-string connectionString = "endpoint=https://transactionalemailsender.brazil.communication.azure.com/;accesskey=1U74oOyKR1NOQsqu6pptpH7dDcJk4kOIE607MLChM0fsbgugrPc2JQQJ99BGACULyCpQ2eabAAAAAZCSW1Uq";
+string connectionString = configuration["AzureEmailService"] ?? "";
 var emailClient = new EmailClient(connectionString);
 
 
