@@ -1,21 +1,28 @@
 using System.Text;
-using Azure;
 using Azure.Communication.Email;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MinhaApiJwt.data;
 using MinhaApiJwt.Models;
+using MinhaApiJwt.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
+
+builder.Services.AddSingleton(new EmailClient(configuration["ConnectionStrings:AzureEmailService"] ?? throw new InvalidOperationException("Email sender connection string not set")));
+builder.Services.AddScoped<EmailService>();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(configuration.GetConnectionString("DefaultConnection"))
 );
 
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+{
+    options.SignIn.RequireConfirmedAccount = true;
+})
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
 
@@ -26,8 +33,6 @@ builder.Services.AddAuthentication(options =>
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 
-// O método .AddJwtBearer() é um método de extensão que se aplica ao AuthenticationBuilder.
-// Este método vem do namespace Microsoft.AspNetCore.Authentication.JwtBearer.
 .AddJwtBearer(options =>
 {
     // A classe TokenValidationParameters vem do namespace Microsoft.IdentityModel.Tokens
@@ -80,6 +85,21 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+
+    try
+    {
+        await CreateRoles.Execute(services);
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Ocorreu um erro ao criar as roles da aplicação");
+    }
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -92,30 +112,5 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.UseHttpsRedirection();
-
-string connectionString = builder.Configuration["ConnectionStrings:AzureEmailService"] ?? "";
-var emailClient = new EmailClient(connectionString);
-
-
-var emailMessage = new EmailMessage(
-    senderAddress: "DoNotReply@beholder.cloud",
-    content: new EmailContent("Test Email")
-    {
-        PlainText = "Hello world via email.",
-        Html = @"
-		<html>
-			<body>
-				<h1>Hello world via email.</h1>
-                <br />
-                <p>Sending hello from .net</p>
-			</body>
-		</html>"
-    },
-    recipients: new EmailRecipients(new List<EmailAddress> { new EmailAddress("fulano@example.com") }));
-    
-
-EmailSendOperation emailSendOperation = emailClient.Send(
-    WaitUntil.Completed,
-    emailMessage);
 
 app.Run();

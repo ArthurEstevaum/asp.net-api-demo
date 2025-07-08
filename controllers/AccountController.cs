@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using MinhaApiJwt.Models;
+using MinhaApiJwt.Services;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -12,11 +13,13 @@ public class AccountsController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _configuration;
+    private readonly EmailService _emailService;
 
-    public AccountsController(UserManager<ApplicationUser> userManager, IConfiguration configuration)
+    public AccountsController(UserManager<ApplicationUser> userManager, IConfiguration configuration, EmailService emailService)
     {
         _userManager = userManager;
         _configuration = configuration;
+        _emailService = emailService;
     }
 
     [HttpPost("register")]
@@ -30,7 +33,7 @@ public class AccountsController : ControllerBase
         {
             Email = dto.Email,
             SecurityStamp = Guid.NewGuid().ToString(),
-            UserName = dto.UserName // UserName é obrigatório
+            UserName = dto.UserName
         };
 
         var result = await _userManager.CreateAsync(user, dto.Password);
@@ -38,7 +41,13 @@ public class AccountsController : ControllerBase
         if (!result.Succeeded)
             return StatusCode(StatusCodes.Status500InternalServerError, $"Falha ao criar usuário: {string.Join(", ", result.Errors.Select(e => e.Description))}");
 
-        return Ok("Usuário criado com sucesso!");
+        await _userManager.AddToRoleAsync(user, "User");
+        var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+        var callbackUrl = Url.Action("ConfirmEmail", "Accounts",
+                new { userId = user.Id, token }, protocol: Request.Scheme);
+
+        await _emailService.sendEmailAsync(dto.Email, "Confirme seu e-mail", $"Por favor, confirme sua conta <a href='{callbackUrl}'>clicando aqui</a>.", cancellationToken: default);
+        return Ok($"Usuário criado com sucesso! Url de confirmação: {callbackUrl}");
     }
 
     [HttpPost("login")]
@@ -64,7 +73,7 @@ public class AccountsController : ControllerBase
             new Claim(ClaimTypes.Email, user.Email ?? ""),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
-        
+
         // Adicionar roles (funções) se você as estiver usando
         // var userRoles = await _userManager.GetRolesAsync(user);
         // foreach (var role in userRoles) { authClaims.Add(new Claim(ClaimTypes.Role, role)); }
@@ -80,6 +89,30 @@ public class AccountsController : ControllerBase
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ConfirmEmail(string userId, string token)
+    {
+        if (userId == null || token == null)
+        {
+            return NotFound();
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+
+        if (user == null)
+        {
+            return NotFound($"Não foi possível encontrar o usuário com o ID '{userId}'.");
+        }
+
+        var result = await _userManager.ConfirmEmailAsync(user, token);
+        if (result.Succeeded)
+        {
+            return Ok("Email confirmado com sucesso");
+        }
+
+        return BadRequest();
     }
 }
 
